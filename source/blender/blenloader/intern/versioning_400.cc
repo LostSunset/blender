@@ -131,7 +131,7 @@ static void convert_action_in_place(blender::animrig::Action &action)
 
   Slot &slot = action.slot_add();
   slot.idtype = idtype;
-  slot.name_ensure_prefix();
+  slot.identifier_ensure_prefix();
 
   Layer &layer = action.layer_add("Layer");
   blender::animrig::Strip &strip = layer.strip_add(action,
@@ -248,7 +248,7 @@ static void version_legacy_actions_to_layered(Main *bmain)
     if (user_infos.size() == 1) {
       /* Rename the slot after its single user. If there are multiple users, the name is unchanged
        * because there is no good way to determine a name. */
-      action.slot_name_set(*bmain, slot_to_assign, user_infos[0].id->name);
+      action.slot_identifier_set(*bmain, slot_to_assign, user_infos[0].id->name);
     }
     for (ActionUserInfo &action_user : user_infos) {
       const ActionSlotAssignmentResult result = generic_assign_action_slot(
@@ -270,7 +270,8 @@ static void version_legacy_actions_to_layered(Main *bmain)
            * preserve this unusual (but technically valid) state of affairs.
            */
           *action_user.slot_handle = slot_to_assign.handle;
-          BLI_strncpy_utf8(action_user.slot_name, slot_to_assign.name, Slot::name_length_max);
+          BLI_strncpy_utf8(
+              action_user.slot_name, slot_to_assign.identifier, Slot::identifier_length_max);
 
           printf(
               "Warning: legacy action \"%s\" is assigned to \"%s\", which does not match the "
@@ -279,9 +280,9 @@ static void version_legacy_actions_to_layered(Main *bmain)
               "this type mismatch. This likely indicates something odd about the blend file.\n",
               action.id.name + 2,
               action_user.id->name,
-              slot_to_assign.name_prefix_for_idtype().c_str(),
-              slot_to_assign.name_without_prefix().c_str(),
-              slot_to_assign.name_prefix_for_idtype().c_str(),
+              slot_to_assign.identifier_prefix_for_idtype().c_str(),
+              slot_to_assign.identifier_without_prefix().c_str(),
+              slot_to_assign.identifier_prefix_for_idtype().c_str(),
               action_user.id->name);
           break;
         case ActionSlotAssignmentResult::SlotNotFromAction:
@@ -1257,6 +1258,18 @@ void do_versions_after_linking_400(FileData *fd, Main *bmain)
 
   if (!MAIN_VERSION_FILE_ATLEAST(bmain, 404, 2)) {
     version_legacy_actions_to_layered(bmain);
+  }
+
+  if (!MAIN_VERSION_FILE_ATLEAST(bmain, 404, 7)) {
+    constexpr char SCE_SNAP_TO_NODE_X = (1 << 0);
+    constexpr char SCE_SNAP_TO_NODE_Y = (1 << 1);
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->toolsettings->snap_node_mode & SCE_SNAP_TO_NODE_X ||
+          scene->toolsettings->snap_node_mode & SCE_SNAP_TO_NODE_Y)
+      {
+        scene->toolsettings->snap_node_mode = SCE_SNAP_TO_GRID;
+      }
+    }
   }
 
   /**
@@ -2968,9 +2981,7 @@ static void update_paint_modes_for_brush_assets(Main &bmain)
   /* Replace persistent tool references with the new single builtin brush tool. */
   LISTBASE_FOREACH (WorkSpace *, workspace, &bmain.workspaces) {
     LISTBASE_FOREACH (bToolRef *, tref, &workspace->tools) {
-      if (STREQ(tref->idname, "builtin_brush.Draw")) {
-        /* Explicitly check against the old brush name, as the old texture paint image mode brush
-         * tool has a non-paint related mode. */
+      if (tref->space_type == SPACE_IMAGE && tref->mode == SI_MODE_PAINT) {
         STRNCPY(tref->idname, "builtin.brush");
         continue;
       }
@@ -3605,7 +3616,7 @@ void blo_do_versions_400(FileData *fd, Library * /*lib*/, Main *bmain)
   if (!MAIN_VERSION_FILE_ATLEAST(bmain, 400, 22)) {
     /* Initialize root panel flags in files created before these flags were added. */
     FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
-      ntree->tree_interface.root_panel.flag |= NODE_INTERFACE_PANEL_ALLOW_CHILD_PANELS;
+      ntree->tree_interface.root_panel.flag |= NODE_INTERFACE_PANEL_ALLOW_CHILD_PANELS_LEGACY;
     }
     FOREACH_NODETREE_END;
   }
@@ -3769,12 +3780,12 @@ void blo_do_versions_400(FileData *fd, Library * /*lib*/, Main *bmain)
       auto versioning_snap_to = [](short snap_to_old, int type) {
         eSnapMode snap_to_new = SCE_SNAP_TO_NONE;
         if (snap_to_old & (1 << 0)) {
-          snap_to_new |= type == IS_NODE ? SCE_SNAP_TO_NODE_X :
+          snap_to_new |= type == IS_NODE ? SCE_SNAP_TO_NONE :
                          type == IS_ANIM ? SCE_SNAP_TO_FRAME :
                                            SCE_SNAP_TO_VERTEX;
         }
         if (snap_to_old & (1 << 1)) {
-          snap_to_new |= type == IS_NODE ? SCE_SNAP_TO_NODE_Y :
+          snap_to_new |= type == IS_NODE ? SCE_SNAP_TO_NONE :
                          type == IS_ANIM ? SCE_SNAP_TO_SECOND :
                                            SCE_SNAP_TO_EDGE;
         }
