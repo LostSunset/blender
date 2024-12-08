@@ -155,10 +155,6 @@ typedef struct GPENCIL_StorageList {
   struct GPENCIL_PrivateData *pd;
 } GPENCIL_StorageList;
 
-typedef struct GPENCIL_PassList {
-  struct DRWPass *dummy;
-} GPENCIL_PassList;
-
 typedef struct GPENCIL_FramebufferList {
   struct GPUFrameBuffer *render_fb;
   struct GPUFrameBuffer *gpencil_fb;
@@ -173,6 +169,7 @@ typedef struct GPENCIL_FramebufferList {
 typedef struct GPENCIL_TextureList {
   /* Dummy texture to avoid errors cause by empty sampler. */
   struct GPUTexture *dummy_texture;
+  struct GPUTexture *dummy_depth;
   /* Snapshot for smoother drawing. */
   struct GPUTexture *snapshot_depth_tx;
   struct GPUTexture *snapshot_color_tx;
@@ -194,8 +191,6 @@ struct GPENCIL_Instance {
   /* Invert mask buffer content. */
   PassSimple mask_invert_ps = {"mask_invert_ps"};
 
-  blender::draw::View view = {"GPView"};
-
   float4x4 object_bound_mat;
 };
 
@@ -203,7 +198,7 @@ struct GPENCIL_Data {
   void *engine_type; /* Required */
   struct GPENCIL_FramebufferList *fbl;
   struct GPENCIL_TextureList *txl;
-  struct GPENCIL_PassList *psl;
+  DRWViewportEmptyList *psl;
   struct GPENCIL_StorageList *stl;
   struct GPENCIL_Instance *instance;
 
@@ -250,6 +245,7 @@ typedef struct GPENCIL_PrivateData {
   GPUFrameBuffer *scene_fb;
   /* Copy of txl->dummy_tx */
   GPUTexture *dummy_tx;
+  GPUTexture *dummy_depth;
   /* Copy of v3d->shading.single_color. */
   float v3d_single_color[3];
   /* Copy of v3d->shading.color_type or -1 to ignore. */
@@ -262,8 +258,6 @@ typedef struct GPENCIL_PrivateData {
   bool is_render;
   /* If we are in viewport display (used for VFX). */
   bool is_viewport;
-  /* True in selection and auto_depth drawing */
-  bool draw_depth_only;
   /* Is shading set to wire-frame. */
   bool draw_wireframe;
   /* Used by the depth merge step. */
